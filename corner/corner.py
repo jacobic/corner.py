@@ -23,7 +23,8 @@ def corner(xs, bins=20, range=None, weights=None, color="k", hist_bin_factor=1,
            show_titles=False, title_fmt=".2f", title_kwargs=None,
            truths=None, truth_color="#4682b4",
            scale_hist=False, quantiles=None, verbose=False, fig=None,
-           max_n_ticks=5, top_ticks=False, use_math_text=False, reverse=False,
+           max_n_ticks=5, top_ticks=False, use_math_text=False,
+           reverse=False, return_contours=False,
            hist_kwargs=None, **hist2d_kwargs):
     """
     Make a *sick* corner plot showing the projections of a data set in a
@@ -108,6 +109,9 @@ def corner(xs, bins=20, range=None, weights=None, color="k", hist_bin_factor=1,
     plot_contours : bool
         Draw contours for dense regions of the plot.
 
+    return_contours : bool
+        If true, return contours for levels levels defined by quantiles.
+
     use_math_text : bool
         If true, then axis tick labels for very large or small exponents will
         be displayed as powers of 10 rather than using `e`.
@@ -131,7 +135,6 @@ def corner(xs, bins=20, range=None, weights=None, color="k", hist_bin_factor=1,
     **hist2d_kwargs
         Any remaining keyword arguments are sent to `corner.hist2d` to generate
         the 2-D histogram plots.
-
     """
     if quantiles is None:
         quantiles = []
@@ -245,6 +248,7 @@ def corner(xs, bins=20, range=None, weights=None, color="k", hist_bin_factor=1,
     if smooth1d is None:
         hist_kwargs["histtype"] = hist_kwargs.get("histtype", "step")
 
+    contour_levels = []
     for i, x in enumerate(xs):
         # Deal with masked arrays.
         if hasattr(x, "compressed"):
@@ -367,9 +371,12 @@ def corner(xs, bins=20, range=None, weights=None, color="k", hist_bin_factor=1,
             if hasattr(y, "compressed"):
                 y = y.compressed()
 
-            hist2d(y, x, ax=ax, range=[range[j], range[i]], weights=weights,
-                   color=color, smooth=smooth, bins=[bins[j], bins[i]],
-                   **hist2d_kwargs)
+            _contour_levels = hist2d(y, x, ax=ax, range=[range[j], range[i]],
+                                     weights=weights, color=color,
+                                     smooth=smooth, bins=[bins[j], bins[i]],
+                                     return_contours=return_contours,
+                                     **hist2d_kwargs)
+            contour_levels.append(_contour_levels)
 
             if truths is not None:
                 if truths[i] is not None and truths[j] is not None:
@@ -423,7 +430,10 @@ def corner(xs, bins=20, range=None, weights=None, color="k", hist_bin_factor=1,
                 ax.yaxis.set_major_formatter(
                     ScalarFormatter(useMathText=use_math_text))
 
-    return fig
+    if return_contours:
+        return fig, contour_levels
+    else:
+        return fig
 
 
 def quantile(x, q, weights=None):
@@ -481,8 +491,8 @@ def quantile(x, q, weights=None):
 
 def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
            ax=None, color=None, quiet=False,
-           plot_datapoints=True, plot_density=True,
-           plot_contours=True, no_fill_contours=False, fill_contours=False,
+           plot_datapoints=True, plot_density=True, plot_contours=True,
+           no_fill_contours=False, fill_contours=False, return_contours=True,
            contour_kwargs=None, contourf_kwargs=None, data_kwargs=None,
            **kwargs):
     """
@@ -522,6 +532,9 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
     fill_contours : bool
         Fill the contours.
 
+    return_contours : bool
+        If true, return contours for levels levels defined by quantiles.
+
     contour_kwargs : dict
         Any additional keyword arguments to pass to the `contour` method.
 
@@ -531,7 +544,6 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
     data_kwargs : dict
         Any additional keyword arguments to pass to the `plot` method when
         adding the individual data points.
-
     """
     if ax is None:
         ax = pl.gca()
@@ -668,3 +680,12 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
 
     ax.set_xlim(range[0])
     ax.set_ylim(range[1])
+
+    if return_contours:
+        contour_levels = dict()
+        for i, _V in enumerate(V):
+            # Plot invisible contours just to make use of the return value.
+            contours = ax.contourf(X2, Y2, H2.T, [_V, H.max()], alpha=1.0,
+                                   cmap=white_cmap, antialiased=False)
+            contour_levels[i] = np.vstack(contours.allsegs[0])
+        return contour_levels
